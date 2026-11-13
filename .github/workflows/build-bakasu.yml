@@ -14,12 +14,22 @@ jobs:
           sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio
           git config --global http.postBuffer 524288000
 
-      - name: 拉取内核源码
+      - name: 拉取源码，不加载自带KernelSU子模块（核心防冲突）
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          submodules: false
 
-      - name: 清理旧SU残留（KSU/SukiSU/旧BakaSU）
+      - name: 生成版本信息
+        id: version_info
+        run: |
+          BUILD_DATE=$(date +%Y%m%d-%H%M)
+          GIT_SHORT=$(git rev-parse --short HEAD)
+          echo "BUILD_DATE=${BUILD_DATE}" >> $GITHUB_OUTPUT
+          echo "GIT_SHORT=${GIT_SHORT}" >> $GITHUB_OUTPUT
+          echo "ZIP_NAME=BakaSU-Star-${BUILD_DATE}-${GIT_SHORT}.zip" >> $GITHUB_OUTPUT
+
+      - name: 彻底清理旧KSU残留
         run: |
           rm -rf drivers/kernelsu drivers/kernel-su BakaSU KernelSU
           sed -i '/kernelsu/d' drivers/Makefile || true
@@ -27,7 +37,7 @@ jobs:
           sed -i '/kernelsu/d' drivers/Kconfig || true
           sed -i '/kernel-su/d' drivers/Kconfig || true
 
-      - name: 【在线加速拉取BakaSU脚本，网页端可用】
+      - name: 加速拉取BakaSU脚本
         run: |
           curl --retry 5 --connect-timeout 15 --max-time 80 -LSs "https://gh-proxy.com/https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
@@ -35,15 +45,21 @@ jobs:
         run: |
           bash build_device.sh star
 
-      - name: 搜寻 AnyKernel 刷机包
-        id: find_ak
+      - name: 下载 AnyKernel3 模板
         run: |
-          ZIP=$(find . -maxdepth 3 -name "*AnyKernel*.zip" | head -n1)
-          echo "ZIP=$ZIP" >> $GITHUB_OUTPUT
-          ls -la $ZIP
+          curl --retry 3 -L -o AnyKernel3.zip "https://gh-proxy.com/https://github.com/osm0sis/AnyKernel3/archive/refs/heads/master.zip"
+          unzip -q AnyKernel3.zip
+          mv AnyKernel3-master AnyKernel
 
-      - name: 上传编译产物
+      - name: 写入版本信息到anykernel.sh
+        run: |
+          echo "### BakaSU Star Build ${{ steps.version_info.outputs.BUILD_DATE }} - ${{ steps.version_info.outputs.GIT_SHORT }}" >> AnyKernel/anykernel.sh
+          cp out_star/arch/arm64/boot/Image AnyKernel/zImage
+          cd AnyKernel
+          zip -r ../${{ steps.version_info.outputs.ZIP_NAME }} ./*
+
+      - name: 上传可直接TWRP刷入的AnyKernel刷机包
         uses: actions/upload-artifact@v4
         with:
-          name: sm8350-star-bakasu
-          path: ${{ steps.find_ak.outputs.ZIP }}
+          name: ${{ steps.version_info.outputs.ZIP_NAME }}
+          path: ${{ steps.version_info.outputs.ZIP_NAME }}
