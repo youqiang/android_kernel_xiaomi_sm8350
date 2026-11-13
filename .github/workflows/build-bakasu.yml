@@ -7,14 +7,15 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    timeout-minutes: 180
     steps:
-      - name: 安装编译依赖（新增 lld）
+      - name: 安装编译依赖（含 lld）
         run: |
           sudo apt update
-          sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio lld
+          sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio lld ccache
           git config --global http.postBuffer 524288000
 
-      - name: 拉取源码，不加载自带KernelSU子模块（核心防冲突）
+      - name: 拉取内核源码，不加载自带KernelSU子模块
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
@@ -29,21 +30,43 @@ jobs:
           echo "GIT_SHORT=${GIT_SHORT}" >> $GITHUB_OUTPUT
           echo "ZIP_NAME=BakaSU-Star-${BUILD_DATE}-${GIT_SHORT}.zip" >> $GITHUB_OUTPUT
 
-      - name: 彻底清理旧KSU残留
+      - name: 清理旧 KernelSU / BakaSU 残留
         run: |
           rm -rf drivers/kernelsu drivers/kernel-su BakaSU KernelSU
           sed -i '/kernelsu/d' drivers/Makefile || true
           sed -i '/kernel-su/d' drivers/Makefile || true
           sed -i '/kernelsu/d' drivers/Kconfig || true
           sed -i '/kernel-su/d' drivers/Kconfig || true
+          # 额外清理常见KSU补丁痕迹
+          find . -type f -name "*.patch" -exec grep -l "kernelsu" {} \; | xargs rm -f || true
 
-      - name: 加速拉取BakaSU脚本
+      - name: 配置 ccache 加速
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ccache
+          key: ${{ runner.os }}-ccache-sm8350-star-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-ccache-sm8350-star-
+        env:
+          CCACHE_DIR: ~/.cache/ccache
+
+      - name: 拉取并执行 BakaSU setup.sh
         run: |
           curl --retry 5 --connect-timeout 15 --max-time 80 -LSs "https://gh-proxy.com/https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
       - name: 编译 Star 内核
         run: |
           bash build_device.sh star
+        env:
+          CCACHE_DIR: ~/.cache/ccache
+          CCACHE_MAXSIZE: 20G
+
+      - name: 校验内核镜像是否编译成功
+        run: |
+          if [ ! -f out_star/arch/arm64/boot/Image ]; then
+            echo "❌ Image 编译失败，不存在 out_star/arch/arm64/boot/Image"
+            exit 1
+          fi
 
       - name: 下载 AnyKernel3 模板
         run: |
@@ -51,14 +74,13 @@ jobs:
           unzip -q AnyKernel3.zip
           mv AnyKernel3-master AnyKernel
 
-      - name: 写入版本信息到anykernel.sh + 打包
+      - name: 拷贝内核镜像 + 打包 AnyKernel 刷机包
         run: |
-          echo "### BakaSU Star Build ${{ steps.version_info.outputs.BUILD_DATE }} - ${{ steps.version_info.outputs.GIT_SHORT }}" >> AnyKernel/anykernel.sh
           cp out_star/arch/arm64/boot/Image AnyKernel/zImage
           cd AnyKernel
           zip -r ../${{ steps.version_info.outputs.ZIP_NAME }} ./*
 
-      - name: 上传可直接TWRP刷入的AnyKernel刷机包
+      - name: 上传 AnyKernel 刷机包
         uses: actions/upload-artifact@v4
         with:
           name: ${{ steps.version_info.outputs.ZIP_NAME }}
