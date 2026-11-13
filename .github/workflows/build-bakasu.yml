@@ -12,10 +12,7 @@ jobs:
         run: |
           sudo apt update
           sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio
-          # 增加git全局超时配置，防止拉取子模块失败
           git config --global http.postBuffer 524288000
-          git config --global http.lowSpeedLimit 0
-          git config --global http.lowSpeedTime 999999
 
       - name: 拉取内核源码
         uses: actions/checkout@v4
@@ -30,9 +27,9 @@ jobs:
           sed -i '/kernelsu/d' drivers/Kconfig || true
           sed -i '/kernel-su/d' drivers/Kconfig || true
 
-      - name: 集成BakaSU（增加重试+超时，解决raw.githubusercontent网络抽风）
+      - name: 【在线加速拉取BakaSU脚本，网页端可用】
         run: |
-          curl --retry 5 --connect-timeout 15 --max-time 60 -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
+          curl --retry 5 --connect-timeout 15 --max-time 80 -LSs "https://gh-proxy.com/https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
       - name: 编译 Star 内核
         run: |
