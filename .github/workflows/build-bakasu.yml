@@ -8,10 +8,10 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 安装编译依赖
+      - name: 安装编译依赖（新增 lld）
         run: |
           sudo apt update
-          sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio
+          sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio lld
           git config --global http.postBuffer 524288000
 
       - name: 拉取源码，不加载自带KernelSU子模块（核心防冲突）
@@ -51,7 +51,7 @@ jobs:
           unzip -q AnyKernel3.zip
           mv AnyKernel3-master AnyKernel
 
-      - name: 写入版本信息到anykernel.sh
+      - name: 写入版本信息到anykernel.sh + 打包
         run: |
           echo "### BakaSU Star Build ${{ steps.version_info.outputs.BUILD_DATE }} - ${{ steps.version_info.outputs.GIT_SHORT }}" >> AnyKernel/anykernel.sh
           cp out_star/arch/arm64/boot/Image AnyKernel/zImage
