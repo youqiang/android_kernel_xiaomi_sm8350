@@ -9,10 +9,10 @@ jobs:
     runs-on: ubuntu-22.04
     timeout-minutes: 180
     steps:
-      - name: 安装编译依赖（含 lld）
+      - name: 安装编译依赖
         run: |
           sudo apt update
-          sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio lld ccache
+          sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio ccache
           git config --global http.postBuffer 524288000
 
       - name: 拉取内核源码，不加载自带KernelSU子模块
@@ -37,7 +37,6 @@ jobs:
           sed -i '/kernel-su/d' drivers/Makefile || true
           sed -i '/kernelsu/d' drivers/Kconfig || true
           sed -i '/kernel-su/d' drivers/Kconfig || true
-          # 额外清理常见KSU补丁痕迹
           find . -type f -name "*.patch" -exec grep -l "kernelsu" {} \; | xargs rm -f || true
 
       - name: 配置 ccache 加速
@@ -50,12 +49,17 @@ jobs:
         env:
           CCACHE_DIR: ~/.cache/ccache
 
+      - name: 下载 Proton Clang（全套llvm工具链）
+        run: |
+          git clone --depth=1 https://gh-proxy.com/https://github.com/kdrag0n/proton-clang.git clang
+
       - name: 拉取并执行 BakaSU setup.sh
         run: |
           curl --retry 5 --connect-timeout 15 --max-time 80 -LSs "https://gh-proxy.com/https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
       - name: 编译 Star 内核
         run: |
+          export PATH=$PWD/clang/bin:$PATH
           bash build_device.sh star
         env:
           CCACHE_DIR: ~/.cache/ccache
