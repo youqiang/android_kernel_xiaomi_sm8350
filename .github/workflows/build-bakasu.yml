@@ -1,14 +1,14 @@
-name: Build Miyume star kernel + BakaSU
+name: Build sm8350 Star + BakaSU
 on:
   push:
     branches: [ main ]
-  workflow_dispatch: # 支持手动点按钮编译（这个很重要）
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - name: 安装依赖
+      - name: 安装编译依赖
         run: |
           sudo apt update
           sudo apt install -y git build-essential libssl-dev bc bison flex libelf-dev zip unzip python3 cpio
@@ -18,7 +18,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: 清理旧 KSU / SukiSU 残留
+      - name: 清理旧SU残留（KSU/SukiSU/旧BakaSU）
         run: |
           rm -rf drivers/kernelsu drivers/kernel-su BakaSU KernelSU
           sed -i '/kernelsu/d' drivers/Makefile || true
@@ -26,38 +26,23 @@ jobs:
           sed -i '/kernelsu/d' drivers/Kconfig || true
           sed -i '/kernel-su/d' drivers/Kconfig || true
 
-      - name: 拉取并集成最新 BakaSU
+      - name: 集成最新 BakaSU（builtin）
         run: |
           curl -LSs "https://raw.githubusercontent.com/Baka-SU/BakaSU/main/kernel/setup.sh" | bash
 
-      - name: 配置 star_defconfig + BakaSU 必需选项
+      - name: 编译 Star 内核
         run: |
-          make ARCH=arm64 star_defconfig
-          scripts/config -e CONFIG_KSU
-          scripts/config -e CONFIG_KPROBES
-          scripts/config -e CONFIG_KPROBE_EVENTS
-          scripts/config -e CONFIG_OVERLAY_FS
-          scripts/config -e CONFIG_MODULES
-          scripts/config -e CONFIG_DEBUG_FS
-          scripts/config -e CONFIG_KALLSYMS
-          scripts/config -e CONFIG_KALLSYMS_ALL
-          # 新版BakaSU不要KPM，不开启
-          scripts/config -d CONFIG_LTO_CLANG_FULL
-          scripts/config -d CONFIG_CFI_CLANG
-          make ARCH=arm64 olddefconfig
+          bash build_device.sh star
 
-      - name: 执行仓库自带编译脚本
-        run: ./build.sh
-
-      - name: 查找 AnyKernel 刷机包
-        id: findzip
+      - name: 搜寻 AnyKernel 刷机包
+        id: find_ak
         run: |
-          ZIP=$(find . -name "*AnyKernel*.zip" | head -n1)
+          ZIP=$(find . -maxdepth 3 -name "*AnyKernel*.zip" | head -n1)
           echo "ZIP=$ZIP" >> $GITHUB_OUTPUT
           ls -la $ZIP
 
       - name: 上传编译产物
         uses: actions/upload-artifact@v4
         with:
-          name: Miyume-star-BakaSU
-          path: ${{ steps.findzip.outputs.ZIP }}
+          name: sm8350-star-bakasu
+          path: ${{ steps.find_ak.outputs.ZIP }}
